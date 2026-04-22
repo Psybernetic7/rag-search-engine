@@ -138,6 +138,17 @@ class InvertedIndex:
         token = tokens[0]
         counter = self.term_frequencies.get(doc_id, Counter())
         return counter.get(token, 0)
+    
+    def get_bm25_idf(self, term: str) -> float:
+        tokens = normalize_filter_stem(term, self.stopwords)
+        if not tokens:
+            raise Exception("term must be single token")
+        if len(tokens) > 1:
+            raise Exception("term must be single token")
+        token = tokens[0]
+        N = len(self.docmap)
+        df = len(self.index.get(token, set()))
+        return math.log((N - df + 0.5) / (df + 0.5) + 1)
 
         
 
@@ -151,14 +162,28 @@ def tf_command(doc_id: int, term: str) -> int:
     index.load()
     return index.get_tf(doc_id, term)
     
+def compute_idf(index: InvertedIndex, term: str) -> float:
+    tokens = normalize_filter_stem(term, index.stopwords)
+    if not tokens:
+        print("Error: Empty token set")
+        sys.exit(1)
+    stemmed_term = tokens[0]
+    document_ids_for_term = index.index.get(stemmed_term, set())
+    return math.log((len(index.docmap) + 1) / (len(document_ids_for_term) + 1))
+
 def idf_command(term: str):
     index = InvertedIndex()
     index.load()
-    tokens = normalize_filter_stem(term, index.stopwords)
-    try:
-        stemmed_term = tokens[0]
-        document_ids_for_term = index.index.get(stemmed_term, set())
-    except Exception as e:
-        print( "Error: Empty token set")
-        sys.exit(1)
-    return math.log((len(index.docmap) + 1) / (len(document_ids_for_term) + 1))
+    return compute_idf(index, term)
+
+def bm25_idf_command(term: str) -> float:
+    index = InvertedIndex()
+    index.load()
+    return index.get_bm25_idf(term)
+
+def tfidf_command(doc_id: int, term: str) -> float:
+    index = InvertedIndex()
+    index.load()
+    tf = index.get_tf(doc_id, term)
+    idf = compute_idf(index, term)
+    return tf * idf
