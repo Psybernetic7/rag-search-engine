@@ -1,18 +1,25 @@
 # RAG Search Engine
 
-A comprehensive search engine implementation featuring semantic search, keyword-based search, hybrid search, and advanced text chunking capabilities for movie datasets.
+A movie search engine built to explore information retrieval techniques — from classic keyword search through hybrid ranking, LLM re-ranking, retrieval-augmented generation, and precision/recall evaluation.
 
 ## Features
 
-- **Semantic Search**: Find movies based on semantic similarity using transformer-based embeddings
-- **Chunked Semantic Search**: Enhanced search using sentence-level chunking for better relevance matching
-- **Keyword Search**: Traditional BM25 and TF-IDF based search
-- **Hybrid Search**: Combine semantic and keyword search using two strategies:
-  - **Weighted Combination**: Tune with alpha parameter to balance keyword vs. semantic relevance
-  - **Reciprocal Rank Fusion (RRF)**: Robust ranking-based fusion without score normalization
-- **Text Embedding**: Generate embeddings for custom text using pre-trained models
-- **Flexible Chunking**: Split text into semantic chunks or word-based chunks with configurable overlap
-- **CLI Interface**: Easy-to-use command-line interface for all search operations
+- **Keyword Search** — BM25 with Porter stemming and stopword removal
+- **Semantic Search** — Sentence-transformer embeddings with cosine similarity; supports full-document and chunked matching
+- **Hybrid Search** — Two fusion strategies:
+  - **Weighted combination** — tune BM25 vs. semantic balance with an `--alpha` parameter
+  - **Reciprocal Rank Fusion (RRF)** — rank-based fusion, more robust than score normalization
+- **Query Enhancement** — spell correction, query rewriting, and query expansion via Gemini LLM
+- **LLM Re-ranking** — three methods applied on top of RRF results:
+  - `individual` — one LLM prompt per document, scores 0–10
+  - `batch` — single prompt ranks all documents, returns a JSON-ordered list of IDs
+  - `cross_encoder` — local `ms-marco-TinyBERT-L2-v2` cross-encoder scores all pairs in one batch
+- **Search Evaluation** — per-query precision@k, recall@k, and F1 score against a golden dataset
+- **Retrieval-Augmented Generation (RAG)** — four LLM generation modes built on RRF search:
+  - `rag` — direct answer from retrieved context
+  - `summarize` — multi-document synthesis
+  - `citations` — answer with inline `[1]`, `[2]` citations
+  - `question` — casual conversational answer
 
 ## Project Structure
 
@@ -20,19 +27,19 @@ A comprehensive search engine implementation featuring semantic search, keyword-
 rag-search-engine/
 ├── cli/
 │   ├── lib/
-│   │   ├── semantic_search.py      # Semantic search and chunking implementation
-│   │   ├── keyword_search.py       # BM25 and TF-IDF search
-│   │   ├── hybrid_search.py        # Hybrid search combining semantic and keyword
-│   │   ├── search_utils.py         # Search utility functions and formatting
-│   │   └── ...
-│   ├── semantic_search_cli.py      # Semantic search CLI
-│   ├── keyword_search_cli.py       # Keyword search CLI
-│   ├── hybrid_search_cli.py        # Hybrid search CLI
-│   └── ...
+│   │   ├── hybrid_search.py            # Weighted and RRF hybrid search
+│   │   ├── semantic_search.py          # Embedding-based search and chunking
+│   │   ├── keyword_search.py           # BM25 search
+│   │   └── search_utils.py             # Shared utilities
+│   ├── hybrid_search_cli.py            # Hybrid search + query enhancement + re-ranking
+│   ├── evaluation_cli.py               # Precision@k, recall@k, F1 evaluation
+│   ├── augmented_generation_cli.py     # RAG, summarize, citations, question
+│   ├── semantic_search_cli.py          # Semantic search and embedding commands
+│   └── keyword_search_cli.py          # BM25 keyword search commands
 ├── data/
-│   └── movies.json                 # Movie dataset
-├── cache/                          # Generated embeddings and metadata (auto-generated)
-├── .gitignore
+│   ├── movies.json                     # Movie dataset
+│   └── golden_dataset.json            # Labelled queries for evaluation
+├── cache/                              # Auto-generated embeddings and indices
 └── README.md
 ```
 
@@ -40,383 +47,236 @@ rag-search-engine/
 
 ### Prerequisites
 
-- Python 3.8 or higher
+- Python 3.8+
 - [uv](https://docs.astral.sh/uv/) package manager
+- A Gemini API key (required for query enhancement, LLM re-ranking, and RAG commands)
 
 ### Setup
 
-1. **Clone the repository**
+1. Clone the repository
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/Psybernetic7/rag-search-engine.git
    cd rag-search-engine
    ```
 
-2. **Install dependencies**
+2. Install dependencies
    ```bash
    uv sync
    ```
 
-3. **Generate embeddings cache** (required before first use)
+3. Create a `.env` file with your Gemini API key
+   ```
+   GEMINI_API_KEY=your_key_here
+   ```
+
+4. Generate the embeddings cache (required before first search)
    ```bash
    uv run cli/semantic_search_cli.py embed_chunks
    ```
-   
-   This command will:
-   - Load the pre-trained sentence transformer model
-   - Generate embeddings for all movie chunks
-   - Cache the embeddings locally for fast retrieval
-   - Create `cache/chunk_embeddings.npy` and `cache/chunk_metadata.json`
 
 ## Usage
 
 All commands use `uv run` from the project root.
 
-### Semantic Search Commands
+---
 
-#### Search all movies by semantic similarity
+### Hybrid Search
+
+#### Reciprocal Rank Fusion (RRF)
+
 ```bash
-uv run cli/semantic_search_cli.py search "your query" --limit 5
-```
-
-Example:
-```bash
-uv run cli/semantic_search_cli.py search "action movie with police" --limit 5
-```
-
-#### Search using chunked semantic similarity
-For more granular and relevant results by matching against sentence-level chunks:
-```bash
-uv run cli/semantic_search_cli.py search_chunked "your query" --limit 5
-```
-
-Example:
-```bash
-uv run cli/semantic_search_cli.py search_chunked "action movie with police" --limit 3
-```
-
-### Embedding Commands
-
-#### Generate embedding for text
-```bash
-uv run cli/semantic_search_cli.py embed_text "your text here"
-```
-
-#### Generate embedding for a search query
-```bash
-uv run cli/semantic_search_cli.py embedquery "your query here"
-```
-
-### Chunking Commands
-
-#### Semantic chunking (sentence-based)
-Splits text into chunks based on sentence boundaries:
-```bash
-uv run cli/semantic_search_cli.py semantic_chunk "your text here" --max-chunk-size 4 --overlap 1
+uv run cli/hybrid_search_cli.py rrf-search "your query" --limit 5
 ```
 
 Options:
-- `--max-chunk-size`: Maximum number of sentences per chunk (default: 4)
-- `--overlap`: Number of sentences to overlap between chunks (default: 0)
 
-Example:
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-k` | RRF k parameter (lower = top results weighted more) | `60` |
+| `--limit` | Number of results | `5` |
+| `--enhance` | Query enhancement: `spell`, `rewrite`, `expand` | off |
+| `--rerank-method` | Re-ranking: `individual`, `batch`, `cross_encoder` | off |
+| `--evaluate` | LLM relevance evaluation (0–3 per result) | off |
+| `--debug` | Log each pipeline stage | off |
+
+Examples:
+
 ```bash
-uv run cli/semantic_search_cli.py semantic_chunk "First sentence. Second sentence. Third sentence." --max-chunk-size 2
+# Basic search
+uv run cli/hybrid_search_cli.py rrf-search "family movie about bears" --limit 5
+
+# Spell-correct typos before searching
+uv run cli/hybrid_search_cli.py rrf-search "famly movee abut bears" --enhance spell
+
+# Rewrite the query for better recall
+uv run cli/hybrid_search_cli.py rrf-search "that bear movie with leo" --enhance rewrite
+
+# Cross-encoder re-ranking (local, no API calls)
+uv run cli/hybrid_search_cli.py rrf-search "bear attack survival" --limit 5 --rerank-method cross_encoder
+
+# LLM batch re-ranking (one API call)
+uv run cli/hybrid_search_cli.py rrf-search "bear attack survival" --limit 5 --rerank-method batch
+
+# Full pipeline with debug logging
+uv run cli/hybrid_search_cli.py rrf-search "bear attack survival" --limit 5 --rerank-method cross_encoder --debug
+
+# Evaluate result quality with an LLM after searching
+uv run cli/hybrid_search_cli.py rrf-search "family bear movie" --limit 5 --evaluate
 ```
-
-#### Word-based chunking
-Splits text into chunks based on word count:
-```bash
-uv run cli/semantic_search_cli.py chunk "your text here" --chunk-size 200 --overlap 0
-```
-
-Options:
-- `--chunk-size`: Number of words per chunk (default: 200)
-- `--overlap`: Number of words to overlap between chunks (default: 0)
-
-### Hybrid Search Commands
 
 #### Weighted Hybrid Search
-Combines semantic and keyword search with a configurable alpha parameter to balance between the two approaches:
 
 ```bash
 uv run cli/hybrid_search_cli.py weighted-search "your query" --alpha 0.5 --limit 5
 ```
 
-Options:
-- `--alpha`: Weight for BM25 keyword search (0-1, default 0.5)
-  - `0.0` = 100% semantic search
-  - `0.5` = 50/50 split
-  - `1.0` = 100% keyword search
-- `--limit`: Number of results to return (default 5)
-
-Examples:
-```bash
-# Title search (high alpha for keyword focus)
-uv run cli/hybrid_search_cli.py weighted-search "The Lion King" --alpha 0.8
-
-# Conceptual search (low alpha for semantic focus)
-uv run cli/hybrid_search_cli.py weighted-search "family movies" --alpha 0.2
-
-# Mixed query (balanced alpha)
-uv run cli/hybrid_search_cli.py weighted-search "2015 comedies" --alpha 0.5
-```
-
-#### Reciprocal Rank Fusion (RRF) Search
-Combines search results using ranking-based fusion instead of score normalization, making it more robust to outliers:
-
-```bash
-uv run cli/hybrid_search_cli.py rrf-search "your query" -k 60 --limit 5
-```
-
-Options:
-- `-k`: RRF k parameter (default 60)
-  - Lower values (e.g., 20) give more weight to top-ranked results
-  - Higher values (e.g., 100) give more gradual weight distribution
-- `--limit`: Number of results to return (default 5)
-
-Example:
-```bash
-# Standard RRF with default k
-uv run cli/hybrid_search_cli.py rrf-search "action movies"
-
-# RRF with higher k for more balanced results
-uv run cli/hybrid_search_cli.py rrf-search "family movies" -k 100
-```
+`--alpha` controls the BM25/semantic balance:
+- `0.0` = pure semantic, `1.0` = pure BM25, `0.5` = balanced
 
 #### Score Normalization
-Normalize a list of scores using min-max normalization:
 
 ```bash
-uv run cli/hybrid_search_cli.py normalize 0.5 2.3 1.2 0.5 0.1
+uv run cli/hybrid_search_cli.py normalize 0.5 2.3 1.2 0.1
 ```
 
-Output:
-```
-* 0.1818
-* 1.0000
-* 0.5000
-* 0.1818
-* 0.0000
-```
+---
 
-### Verification Commands
+### Evaluation
 
-#### Verify model loading
-```bash
-uv run cli/semantic_search_cli.py verify
-```
-
-#### Verify embeddings exist
-```bash
-uv run cli/semantic_search_cli.py verify_embeddings
-```
-
-#### Rebuild chunked embeddings
-```bash
-uv run cli/semantic_search_cli.py embed_chunks
-```
-
-## Search Output Format
-
-### Semantic Search Results
-```
-1. Movie Title (score: 0.7234)
-  Description preview (first 100 characters)...
-
-2. Another Movie (score: 0.6891)
-  Another description preview...
-```
-
-### Chunked Semantic Search Results
-```
-1. Movie Title (score: 0.7234)
-   Description preview (first 100 characters)...
-
-2. Another Movie (score: 0.6891)
-   Another description preview...
-```
-
-## Cache Management
-
-The cache directory contains pre-computed embeddings and indices for faster searches:
-
-- **chunk_embeddings.npy**: Sentence-level embeddings for chunked semantic search
-- **chunk_metadata.json**: Metadata mapping chunks to documents
-- **movie_embeddings.npy**: Full-document embeddings for semantic search
-- **index.pkl**: BM25 inverted index for keyword search
-- **docmap.pkl**: Document mapping for keyword search
-- **term_frequencies.pkl**: Term frequency data for BM25
-- **doc_lengths.pkl**: Document length data for BM25
-
-### Regenerating Cache
-
-If you modify the semantic chunking parameters or update the movie dataset, regenerate the cache:
+Run precision@k, recall@k, and F1 against the golden dataset for every test query:
 
 ```bash
-# Remove old cache
-rm -rf cache/chunk_embeddings.npy cache/chunk_metadata.json
-
-# Regenerate
-uv run cli/semantic_search_cli.py embed_chunks
+uv run cli/evaluation_cli.py --limit 5
 ```
 
-### Cache Size
+Output format:
 
-The cache files are generated artifacts and are not included in version control (see `.gitignore`). When cloning the repository, run `embed_chunks` to generate them locally.
+```
+k=5
 
-## How It Works
+- Query: dangerous bear wilderness survival
+  - Precision@5: 1.0000
+  - Recall@5: 0.8571
+  - F1 Score: 0.9231
+  - Retrieved: The Edge, Man in the Wilderness, Claws, Into the Grizzly Maze, Alaska
+  - Relevant: Unnatural, Alaska, The Edge, Into the Grizzly Maze, Claws, Man in the Wilderness, The Revenant
+```
+
+**Metrics explained:**
+- **Precision@k** — fraction of retrieved results that are relevant: `relevant_retrieved / k`
+- **Recall@k** — fraction of all relevant documents retrieved: `relevant_retrieved / total_relevant`
+- **F1** — harmonic mean of precision and recall: `2 * P * R / (P + R)`
+
+---
+
+### Retrieval-Augmented Generation
+
+All RAG commands perform an RRF search and feed the results to a Gemini LLM.
+
+#### Direct RAG Answer
+
+```bash
+uv run cli/augmented_generation_cli.py rag "what movies feature dinosaurs coming back to life"
+```
+
+#### Multi-document Summarization
+
+```bash
+uv run cli/augmented_generation_cli.py summarize "bear attack survival films" --limit 5
+```
+
+#### Citation-aware Answer
+
+```bash
+uv run cli/augmented_generation_cli.py citations "what are the best animated bear movies" --limit 5
+```
+
+Sources are numbered `[1]`, `[2]` etc. in the response.
+
+#### Conversational Question Answering
+
+```bash
+uv run cli/augmented_generation_cli.py question "is there a good comedy with a talking bear"
+```
+
+---
 
 ### Semantic Search
 
-1. **Query Processing**: Your search query is converted to an embedding using a pre-trained transformer model
-2. **Similarity Calculation**: Cosine similarity is calculated between the query embedding and all document embeddings
-3. **Ranking**: Results are ranked by similarity score and returned in descending order
+```bash
+# Search by semantic similarity
+uv run cli/semantic_search_cli.py search "action movie with police" --limit 5
 
-### Chunked Semantic Search
+# Chunked semantic search (sentence-level matching)
+uv run cli/semantic_search_cli.py search_chunked "action movie with police" --limit 5
 
-1. **Document Chunking**: Movie descriptions are split into sentence-level chunks
-2. **Query Embedding**: Your query is converted to an embedding
-3. **Chunk Matching**: Each chunk's similarity to the query is calculated
-4. **Aggregation**: For each movie, the highest-scoring chunk is used as the movie's score
-5. **Ranking**: Movies are ranked by their best chunk score
+# Regenerate embeddings cache
+uv run cli/semantic_search_cli.py embed_chunks
+```
 
-### Text Chunking Strategy
+### Keyword Search
 
-The semantic chunking function handles edge cases:
-- Strips leading/trailing whitespace from input
-- Treats text without punctuation as a single sentence
-- Removes empty chunks after processing
-- Supports configurable chunk size and overlap
+```bash
+uv run cli/keyword_search_cli.py search "your query" --limit 5
+```
 
-### Hybrid Search
+---
 
-Two complementary approaches for combining keyword and semantic search:
+## How It Works
 
-#### Weighted Combination
-1. **BM25 Scoring**: Calculate keyword relevance scores
-2. **Semantic Scoring**: Calculate semantic similarity scores
-3. **Normalization**: Normalize both score sets to [0, 1] range using min-max normalization
-4. **Weighting**: Combine normalized scores using `alpha * bm25 + (1-alpha) * semantic`
-5. **Ranking**: Return results sorted by hybrid score in descending order
+### Search Pipeline
 
-**Use case**: Works well when you want fine-grained control over keyword vs. semantic balance. Choose alpha based on query type:
-- Title searches (high alpha ~0.8): "The Revenant"
-- Conceptual searches (low alpha ~0.2): "family movies"
-- Mixed searches (balanced alpha ~0.5): "2015 comedies"
+1. **BM25** ranks all documents by keyword relevance (Porter stemming, stopword removal)
+2. **Semantic search** ranks all documents by cosine similarity to the query embedding (`all-MiniLM-L6-v2`, 384 dimensions)
+3. **RRF fusion** merges both ranked lists: each document's score is `1/(k + rank_bm25) + 1/(k + rank_semantic)`
+4. **Re-ranking** (optional) re-scores the top 5× candidates using a cross-encoder or LLM, then truncates to `--limit`
 
-#### Reciprocal Rank Fusion (RRF)
-1. **BM25 Ranking**: Get BM25 results with positions (rank 1, 2, 3, ...)
-2. **Semantic Ranking**: Get semantic search results with positions
-3. **RRF Scoring**: Calculate `1 / (k + rank)` for each result in each ranking
-4. **Score Aggregation**: Sum RRF scores for documents appearing in both rankings
-5. **Ranking**: Return results sorted by combined RRF score in descending order
+### Re-ranking Methods
 
-**Use case**: More robust approach that avoids score normalization issues. Handles outliers and different score distributions well. Tune k parameter:
-- Lower k (~20): More weight to top results, steeper drop-off
-- Default k (~60): Balanced weighting across results
-- Higher k (~100): Gradual decline, more weight to lower-ranked results
+| Method | How it works | Speed | Requires API |
+|--------|--------------|-------|--------------|
+| `individual` | One LLM call per document, scores 0–10 | Slow | Yes |
+| `batch` | Single LLM call, returns ranked JSON ID list | Fast | Yes |
+| `cross_encoder` | Local `ms-marco-TinyBERT-L2-v2`, all pairs in one batch | Fast | No |
+
+### RAG Pipeline
+
+1. RRF search retrieves the top-k most relevant movie documents
+2. Titles and descriptions are formatted as context
+3. A Gemini LLM generates a response grounded in the retrieved documents
+
+---
 
 ## Technical Details
 
-### Models and Algorithms
-
-#### Semantic Search
-- **Model**: `sentence-transformers` with `all-MiniLM-L6-v2`
-- **Embedding Dimensions**: 384
-- **Similarity Metric**: Cosine similarity
-
-#### Keyword Search
-- **Algorithm**: BM25 (Best Matching 25)
-- **BM25 Parameters**:
-  - `k1 = 1.5`: Controls term frequency saturation
-  - `b = 0.75`: Controls impact of document length normalization
-- **Text Processing**: Porter stemming, stopword removal, punctuation removal
-
-#### Hybrid Search
-- **Weighted Combination**: Configurable alpha parameter (0-1)
-- **RRF**: Reciprocal Rank Fusion with configurable k parameter
+| Component | Detail |
+|-----------|--------|
+| Semantic model | `sentence-transformers/all-MiniLM-L6-v2` (384-dim embeddings) |
+| Cross-encoder | `cross-encoder/ms-marco-TinyBERT-L2-v2` |
+| LLM | Gemini (`gemma-4-31b-it` via Google GenAI SDK) |
+| BM25 params | k1=1.5, b=0.75 |
+| Similarity metric | Cosine similarity |
 
 ### Data Format
 
-**movies.json** contains an array of movie objects:
 ```json
 {
   "movies": [
-    {
-      "id": 1,
-      "title": "Movie Title",
-      "description": "Full movie description..."
-    },
-    ...
+    { "id": 1, "title": "Movie Title", "description": "Full description..." }
   ]
 }
 ```
 
-## Requirements
-
-Dependencies are managed with `uv` (see `pyproject.toml`). Key packages:
-- `sentence-transformers`: For semantic embeddings
-- `numpy`: For numerical operations
-- `scikit-learn`: For TF-IDF and cosine similarity
-
-## Performance Tips
-
-1. **First Run**: The first `embed_chunks` command will take several minutes as it generates embeddings. Subsequent searches will be fast.
-2. **Query Optimization**: Short, specific queries tend to yield better results than long, generic ones
-3. **Chunk Size**: Experiment with `--max-chunk-size` when using `semantic_chunk` for different levels of granularity
-
-## Choosing a Search Method
-
-| Query Type | Recommended Method | Reason |
-|------------|-------------------|--------|
-| **Exact titles** | BM25 (keyword) | Precise matching on movie titles |
-| **Conceptual** | Semantic search | "Feel-good movies", "intense dramas" |
-| **Mixed/Complex** | Hybrid (weighted or RRF) | Need both keyword and semantic understanding |
-| **Unknown intent** | RRF hybrid | Most robust, avoids score normalization issues |
-| **Title + concept** | Weighted (alpha 0.5-0.7) | Balance keyword matching with semantic meaning |
-
-### When to Tune Hybrid Parameters
-
-**Weighted Search Alpha**:
-- Set to 0.8+ for title-focused searches
-- Set to 0.2-0.4 for meaning-focused searches
-- Use 0.5 for balanced queries by default
-
-**RRF k Parameter**:
-- Use 20-40 if you want top results to dominate
-- Use 60 (default) for balanced influence across ranks
-- Use 100+ if you want broader coverage of results
+---
 
 ## Troubleshooting
 
-### Module not found errors
-Ensure dependencies are installed with `uv sync` and you're using `uv run` to execute commands.
+**`Module not found`** — run `uv sync` and use `uv run` to execute scripts.
 
-### Out of memory errors during embedding generation
-The embedding process can be memory-intensive. If you encounter errors:
-1. Close other applications
-2. The process should complete despite memory warnings
+**Embeddings missing** — run `uv run cli/semantic_search_cli.py embed_chunks` to generate the cache.
 
-### Embeddings not loading
-If embeddings seem outdated, regenerate them:
-```bash
-uv run cli/semantic_search_cli.py embed_chunks
-```
+**BM25 index missing** — the index builds automatically on first use; to force a rebuild: `uv run cli/keyword_search_cli.py build`.
 
-### BM25 index not found
-If you see "Index files not found" when using hybrid search:
-```bash
-# The index will auto-build on first use, but you can force rebuild:
-uv run cli/keyword_search_cli.py build
-```
+**Gemini 500 errors** — the API occasionally returns transient 500s; the CLI handles them gracefully (scores default to 0). Retry if it happens consistently.
 
-### Hybrid search returning unexpected results
-- For **weighted search**: Try adjusting the `--alpha` parameter to better match your query type
-- For **RRF**: Adjust the `-k` parameter - lower k emphasizes top results, higher k broadens influence
-- Check that both embeddings and BM25 index are built:
-  ```bash
-  uv run cli/semantic_search_cli.py embed_chunks
-  uv run cli/keyword_search_cli.py build
-  ```
-
-
+**Cross-encoder GPU errors** — the cross-encoder is loaded with `device="cpu"` by default; no GPU is required.
