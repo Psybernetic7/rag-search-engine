@@ -41,7 +41,7 @@ rag-search-engine/
 ### Prerequisites
 
 - Python 3.8 or higher
-- pip package manager
+- [uv](https://docs.astral.sh/uv/) package manager
 
 ### Setup
 
@@ -51,21 +51,14 @@ rag-search-engine/
    cd rag-search-engine
    ```
 
-2. **Create and activate virtual environment**
+2. **Install dependencies**
    ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
+   uv sync
    ```
 
-3. **Install dependencies**
+3. **Generate embeddings cache** (required before first use)
    ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Generate embeddings cache** (required before first use)
-   ```bash
-   cd cli
-   python3 semantic_search_cli.py embed_chunks
+   uv run cli/semantic_search_cli.py embed_chunks
    ```
    
    This command will:
@@ -76,41 +69,41 @@ rag-search-engine/
 
 ## Usage
 
-All commands are run from the `cli/` directory.
+All commands use `uv run` from the project root.
 
 ### Semantic Search Commands
 
 #### Search all movies by semantic similarity
 ```bash
-python3 semantic_search_cli.py search "your query" --limit 5
+uv run cli/semantic_search_cli.py search "your query" --limit 5
 ```
 
 Example:
 ```bash
-python3 semantic_search_cli.py search "action movie with police" --limit 5
+uv run cli/semantic_search_cli.py search "action movie with police" --limit 5
 ```
 
 #### Search using chunked semantic similarity
 For more granular and relevant results by matching against sentence-level chunks:
 ```bash
-python3 semantic_search_cli.py search_chunked "your query" --limit 5
+uv run cli/semantic_search_cli.py search_chunked "your query" --limit 5
 ```
 
 Example:
 ```bash
-python3 semantic_search_cli.py search_chunked "action movie with police" --limit 3
+uv run cli/semantic_search_cli.py search_chunked "action movie with police" --limit 3
 ```
 
 ### Embedding Commands
 
 #### Generate embedding for text
 ```bash
-python3 semantic_search_cli.py embed_text "your text here"
+uv run cli/semantic_search_cli.py embed_text "your text here"
 ```
 
 #### Generate embedding for a search query
 ```bash
-python3 semantic_search_cli.py embedquery "your query here"
+uv run cli/semantic_search_cli.py embedquery "your query here"
 ```
 
 ### Chunking Commands
@@ -118,7 +111,7 @@ python3 semantic_search_cli.py embedquery "your query here"
 #### Semantic chunking (sentence-based)
 Splits text into chunks based on sentence boundaries:
 ```bash
-python3 semantic_search_cli.py semantic_chunk "your text here" --max-chunk-size 4 --overlap 1
+uv run cli/semantic_search_cli.py semantic_chunk "your text here" --max-chunk-size 4 --overlap 1
 ```
 
 Options:
@@ -127,13 +120,13 @@ Options:
 
 Example:
 ```bash
-python3 semantic_search_cli.py semantic_chunk "First sentence. Second sentence. Third sentence." --max-chunk-size 2
+uv run cli/semantic_search_cli.py semantic_chunk "First sentence. Second sentence. Third sentence." --max-chunk-size 2
 ```
 
 #### Word-based chunking
 Splits text into chunks based on word count:
 ```bash
-python3 semantic_search_cli.py chunk "your text here" --chunk-size 200 --overlap 0
+uv run cli/semantic_search_cli.py chunk "your text here" --chunk-size 200 --overlap 0
 ```
 
 Options:
@@ -146,7 +139,7 @@ Options:
 Combines semantic and keyword search with a configurable alpha parameter to balance between the two approaches:
 
 ```bash
-python3 hybrid_search_cli.py weighted-search "your query" --alpha 0.5 --limit 5
+uv run cli/hybrid_search_cli.py weighted-search "your query" --alpha 0.5 --limit 5
 ```
 
 Options:
@@ -159,20 +152,20 @@ Options:
 Examples:
 ```bash
 # Title search (high alpha for keyword focus)
-python3 hybrid_search_cli.py weighted-search "The Lion King" --alpha 0.8
+uv run cli/hybrid_search_cli.py weighted-search "The Lion King" --alpha 0.8
 
 # Conceptual search (low alpha for semantic focus)
-python3 hybrid_search_cli.py weighted-search "family movies" --alpha 0.2
+uv run cli/hybrid_search_cli.py weighted-search "family movies" --alpha 0.2
 
 # Mixed query (balanced alpha)
-python3 hybrid_search_cli.py weighted-search "2015 comedies" --alpha 0.5
+uv run cli/hybrid_search_cli.py weighted-search "2015 comedies" --alpha 0.5
 ```
 
 #### Reciprocal Rank Fusion (RRF) Search
 Combines search results using ranking-based fusion instead of score normalization, making it more robust to outliers:
 
 ```bash
-python3 hybrid_search_cli.py rrf-search "your query" -k 60 --limit 5
+uv run cli/hybrid_search_cli.py rrf-search "your query" -k 60 --limit 5
 ```
 
 Options:
@@ -184,17 +177,17 @@ Options:
 Example:
 ```bash
 # Standard RRF with default k
-python3 hybrid_search_cli.py rrf-search "action movies"
+uv run cli/hybrid_search_cli.py rrf-search "action movies"
 
 # RRF with higher k for more balanced results
-python3 hybrid_search_cli.py rrf-search "family movies" -k 100
+uv run cli/hybrid_search_cli.py rrf-search "family movies" -k 100
 ```
 
 #### Score Normalization
 Normalize a list of scores using min-max normalization:
 
 ```bash
-python3 hybrid_search_cli.py normalize 0.5 2.3 1.2 0.5 0.1
+uv run cli/hybrid_search_cli.py normalize 0.5 2.3 1.2 0.5 0.1
 ```
 
 Output:
@@ -210,17 +203,17 @@ Output:
 
 #### Verify model loading
 ```bash
-python3 semantic_search_cli.py verify
+uv run cli/semantic_search_cli.py verify
 ```
 
 #### Verify embeddings exist
 ```bash
-python3 semantic_search_cli.py verify_embeddings
+uv run cli/semantic_search_cli.py verify_embeddings
 ```
 
 #### Rebuild chunked embeddings
 ```bash
-python3 semantic_search_cli.py embed_chunks
+uv run cli/semantic_search_cli.py embed_chunks
 ```
 
 ## Search Output Format
@@ -264,7 +257,7 @@ If you modify the semantic chunking parameters or update the movie dataset, rege
 rm -rf cache/chunk_embeddings.npy cache/chunk_metadata.json
 
 # Regenerate
-python3 semantic_search_cli.py embed_chunks
+uv run cli/semantic_search_cli.py embed_chunks
 ```
 
 ### Cache Size
@@ -361,7 +354,7 @@ Two complementary approaches for combining keyword and semantic search:
 
 ## Requirements
 
-See `requirements.txt` for all dependencies. Key packages:
+Dependencies are managed with `uv` (see `pyproject.toml`). Key packages:
 - `sentence-transformers`: For semantic embeddings
 - `numpy`: For numerical operations
 - `scikit-learn`: For TF-IDF and cosine similarity
@@ -397,7 +390,7 @@ See `requirements.txt` for all dependencies. Key packages:
 ## Troubleshooting
 
 ### Module not found errors
-Ensure you're running commands from the `cli/` directory and the virtual environment is activated.
+Ensure dependencies are installed with `uv sync` and you're using `uv run` to execute commands.
 
 ### Out of memory errors during embedding generation
 The embedding process can be memory-intensive. If you encounter errors:
@@ -407,14 +400,14 @@ The embedding process can be memory-intensive. If you encounter errors:
 ### Embeddings not loading
 If embeddings seem outdated, regenerate them:
 ```bash
-python3 semantic_search_cli.py embed_chunks
+uv run cli/semantic_search_cli.py embed_chunks
 ```
 
 ### BM25 index not found
 If you see "Index files not found" when using hybrid search:
 ```bash
 # The index will auto-build on first use, but you can force rebuild:
-python3 keyword_search_cli.py build
+uv run cli/keyword_search_cli.py build
 ```
 
 ### Hybrid search returning unexpected results
@@ -422,8 +415,8 @@ python3 keyword_search_cli.py build
 - For **RRF**: Adjust the `-k` parameter - lower k emphasizes top results, higher k broadens influence
 - Check that both embeddings and BM25 index are built:
   ```bash
-  python3 semantic_search_cli.py embed_chunks
-  python3 keyword_search_cli.py build
+  uv run cli/semantic_search_cli.py embed_chunks
+  uv run cli/keyword_search_cli.py build
   ```
 
 
