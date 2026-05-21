@@ -64,6 +64,7 @@ class InvertedIndex:
         self.stopwords = load_stopwords()
         self.term_frequencies: Dict[int, Counter] = {}
         self.doc_lengths: Dict[int, int] = {}
+        self.index_path = Path("cache") / "index.pkl"
         
 
     def __add_document(self, doc_id, text):
